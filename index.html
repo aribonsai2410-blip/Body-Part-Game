@@ -711,6 +711,7 @@ avatarPicker('avMe',0,i=>{ localAv=i; pushMe(); });
 /* =========================================================
    KẾT NỐI PHÒNG  —  qua Supabase Realtime (không cần đăng nhập)
    ========================================================= */
+const BUILD='bản 8 — 26/09';
 let lastErr='', peersNow=[], sb=null, ch=null, roomName='';
 const myKey='p'+Math.random().toString(36).slice(2,10);
 let myPresence={}, connCb=null;
@@ -767,10 +768,10 @@ function buildPeers(){
 
 function diag(){
   const d=document.getElementById('diag');
-  if(!online){ d.style.display='none'; return; }
   d.style.display='block';
   const others=peersNow.filter(p=>!p.sameTab);
   d.innerHTML=
+    `Phiên bản file: <b>${BUILD}</b><br>`+
     `Phòng: <b>${roomName?esc(roomName):'chưa đặt'}</b> — ${connected?'<b>đã kết nối</b>':'chưa kết nối'}<br>`+
     `Vai trò của bạn: <b>${isHost?'chủ trò':(mySeat===1?'người chơi':'chưa chọn')}</b><br>`+
     `Người khác trong phòng: <b>${others.length}</b>`+
@@ -797,6 +798,8 @@ async function connectRoom(code){
                             :`Đã vào phòng <b>${esc(code)}</b>. Chờ giáo viên bấm bắt đầu.`;
       }
       if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){ connected=false; note({code:st,message:'không kết nối được phòng'});
+        document.getElementById('enter').textContent='Thử lại';
+        document.getElementById('enter').disabled=false;
         msg.innerHTML='<b>Không kết nối được.</b> Kiểm tra lại Project URL và anon key, hoặc thử tải lại trang.'; }
       if(st==='CLOSED'){ connected=false; diag(); }
     });
