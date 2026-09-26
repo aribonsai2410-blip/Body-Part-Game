@@ -784,7 +784,7 @@ async function connectRoom(code){
   const cfg=getCfg();
   const msg=document.getElementById('netmsg');
   if(!cfg){ document.getElementById('cfgBox').style.display='block';
-    msg.innerHTML='<b>Chưa có cài đặt Supabase.</b> Dán Project URL và anon key ở khung phía trên rồi bấm Lưu cài đặt.'; return false; }
+    msg.innerHTML='<b>Link này chưa mang cấu hình phòng.</b> Nếu em là học sinh, xin giáo viên gửi lại link mới copy từ nút “Copy link”. Nếu là giáo viên, dán Project URL và anon key ở khung trên rồi bấm Lưu cài đặt.'; return false; }
   if(typeof supabase==='undefined'){ msg.innerHTML='<b>Không tải được thư viện đồng bộ.</b> Kiểm tra kết nối mạng rồi tải lại trang.'; return false; }
   roomName=code;
   try{
@@ -801,6 +801,7 @@ async function connectRoom(code){
       if(st==='CLOSED'){ connected=false; diag(); }
     });
     setInterval(()=>{ if(room) pushMe(); },3000);
+    setInterval(()=>{ if(ch){ peersNow=buildPeers(); renderRoomList(peersNow); diag(); } },2000);
     return true;
   }catch(e){ note(e); msg.innerHTML='<b>Lỗi khi mở phòng.</b> Xem dòng lỗi ở khung xám bên dưới.'; return false; }
 }
@@ -853,7 +854,12 @@ function renderRoomList(peers){
       <span>${nm}${p.sameTab?' <span class="youtag">bạn</span>':''}</span>${tag}</div>`;
   }).join('') || '<div class="r"><span>Chưa có ai khác trong phòng.</span></div>';
   const btn=document.getElementById('startOnline');
-  if(btn) btn.style.display=(isHost && peers.some(p=>!p.sameTab)) ? 'inline-block' : 'none';
+  if(btn){
+    btn.style.display = isHost ? 'inline-block' : 'none';
+    const has = peers.some(p=>!p.sameTab);
+    btn.textContent = has ? 'Bắt đầu ván' : 'Chờ học sinh vào phòng…';
+    btn.style.opacity = has ? '1' : '.55';
+  }
 }
 
 function codeField(){ return (document.getElementById('roomCode').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
@@ -889,7 +895,7 @@ document.getElementById('beJoin').addEventListener('click',async()=>{
 });
 document.getElementById('startOnline').addEventListener('click',()=>{
   const other=peersNow.find(p=>!p.sameTab && p.presence && p.presence.role!=='host');
-  if(!other){ document.getElementById('warn').textContent='Chưa thấy học sinh nào trong phòng.'; return; }
+  if(!other){ document.getElementById('warn').textContent='Chưa thấy học sinh nào trong phòng. Kiểm tra xem em đã bấm “Vào phòng — học sinh” và mã phòng có giống nhau chưa.'; return; }
   const meName=(document.getElementById('nMe').value||'Giáo viên').trim();
   const hisAv=(other.presence.av===localAv)?((localAv+2)%6):(other.presence.av||1);
   newGame([{name:meName,av:localAv,peer:myPeer},
