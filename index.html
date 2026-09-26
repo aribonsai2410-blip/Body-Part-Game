@@ -275,10 +275,11 @@ button{font-family:inherit}
         <div class="avatars" id="avMe"></div>
         <input id="roomCode" class="vn" placeholder="Mã phòng, ví dụ LOP5A" maxlength="8"
                style="margin-top:12px;text-transform:uppercase">
-        <div class="rowbtn2">
-          <button class="big small vn" id="beHost">Tạo phòng — giáo viên</button>
-          <button class="big small vn" id="beJoin">Vào phòng — học sinh</button>
-        </div>
+        <label class="vn" style="display:flex;align-items:center;gap:8px;justify-content:center;
+          font-size:13.5px;color:#C3CBF5;margin-top:12px">
+          <input type="checkbox" id="isTeacher" style="width:auto"> Tôi là giáo viên (người chấm thử thách)
+        </label>
+        <div class="rowbtn2"><button class="big small vn" id="enter">Vào phòng chơi</button></div>
       </div>
       <div class="pcard p2">
         <h3 class="vn">ĐANG Ở TRONG PHÒNG</h3>
@@ -288,7 +289,6 @@ button{font-family:inherit}
           <textarea class="codeout" id="shareLink" readonly></textarea>
           <div class="rowbtn2"><button class="big small vn" id="copyLink">Copy link</button></div>
         </div>
-        <button class="big small vn" id="startOnline" style="display:none;margin-top:14px">Bắt đầu ván</button>
       </div>
     </div>
   </div>
@@ -810,66 +810,82 @@ function pushMe(){
   if(!room) return;
   const el=document.getElementById('nMe');
   const name=((el&&el.value)||'').trim().slice(0,14);
-  const base={role:isHost?'host':(mySeat===1?'player':'watch'), name, av:localAv};
-  if(isHost) base.game=S;
+  const base={seated:joinedAt>0, teacher:iAmTeacher, t:joinedAt, name, av:localAv,
+              role:isHost?'host':'player'};
+  base.game = isHost ? S : null;
   send(base);
 }
 function pushState(){
   render();
   if(isHost&&room){
     const el=document.getElementById('nMe');
-    send({role:'host', name:((el&&el.value)||'').trim().slice(0,14), av:localAv, game:S});
+    send({role:'host', seated:true, teacher:iAmTeacher, t:joinedAt,
+          name:((el&&el.value)||'').trim().slice(0,14), av:localAv, game:S});
   }
 }
 
 function onPeers(chg){
   peersNow=chg.peers;
   myPeer=myKey;
+
+  const t=peersNow.find(p=>p.presence && p.presence.seated && p.presence.teacher);
+  teacherKey = t ? t.peer : null;
+
+  const hostKey=electHost();
+  const wasHost=isHost;
+  isHost = (hostKey===myKey);
+  if(isHost!==wasHost) pushMe();
+
   if(isHost){
     peersNow.forEach(p=>{
       if(p.sameTab) return;
       const a=(p.presence||{}).act;
       if(a && a.id && seenAct[p.peer]!==a.id){ seenAct[p.peer]=a.id; handleAct(p.peer,a); }
     });
+    if(!S){
+      const list=seatedPeers();
+      if(list.length>=2) autoStart(list);
+    }
   }else{
-    const h=peersNow.find(p=>!p.sameTab && p.presence && p.presence.role==='host' && p.presence.game);
+    const h=peersNow.find(p=>p.peer===hostKey && p.presence && p.presence.game);
     if(h){
       S=h.presence.game;
-      mySeat=(S.players[1] && S.players[1].peer===myPeer)?1:(S.players[0]&&S.players[0].peer===myPeer?0:-1);
       if(document.getElementById('game').style.display==='none') showGame();
       render();
     }
   }
+  if(S) mySeat = S.players.findIndex(p=>p.peer===myPeer);
   renderRoomList(peersNow); diag();
 }
 
 function renderRoomList(peers){
   const box=document.getElementById('roomList'); if(!box) return;
-  box.innerHTML=peers.map(p=>{
+  const seated=peers.filter(p=>p.presence && p.presence.seated);
+  box.innerHTML=seated.map(p=>{
     const pr=p.presence||{};
-    const nm=esc(pr.name||'Chưa đặt tên');
-    const tag = pr.role==='host' ? '<span class="tagh">giáo viên</span>'
-              : pr.role==='player' ? '<span class="tagme">học sinh</span>' : '';
+    const tag = pr.teacher ? '<span class="tagh">giáo viên</span>' : '<span class="tagme">người chơi</span>';
     return `<div class="r"><div class="d">${avSvg(typeof pr.av==='number'?pr.av:0)}</div>
-      <span>${nm}${p.sameTab?' <span class="youtag">bạn</span>':''}</span>${tag}</div>`;
-  }).join('') || '<div class="r"><span>Chưa có ai khác trong phòng.</span></div>';
-  const btn=document.getElementById('startOnline');
-  if(btn){
-    btn.style.display = isHost ? 'inline-block' : 'none';
-    const has = peers.some(p=>!p.sameTab);
-    btn.textContent = has ? 'Bắt đầu ván' : 'Chờ học sinh vào phòng…';
-    btn.style.opacity = has ? '1' : '.55';
+      <span>${esc(pr.name||'Chưa đặt tên')}${p.sameTab?' <span class="youtag">bạn</span>':''}</span>${tag}</div>`;
+  }).join('') || '<div class="r"><span>Chưa có ai trong phòng.</span></div>';
+  const msg=document.getElementById('netmsg');
+  if(joinedAt && !S){
+    msg.innerHTML = seated.length>=2 ? 'Đủ người rồi, ván đang mở…'
+      : 'Đã vào phòng <b>'+esc(roomName)+'</b>. Chờ người thứ hai bấm vào phòng, game sẽ tự bắt đầu.';
   }
 }
 
-function codeField(){ return (document.getElementById('roomCode').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+let iAmTeacher=false, joinedAt=0, teacherKey=null;
 
-document.getElementById('beHost').addEventListener('click',async()=>{
+document.getElementById('enter').addEventListener('click',async()=>{
   const n=(document.getElementById('nMe').value||'').trim();
   if(!n){ document.getElementById('warn').textContent='Nhập tên trước đã nhé.'; return; }
   let code=codeField();
-  if(!code){ code='LOP'+Math.random().toString(36).slice(2,5).toUpperCase(); document.getElementById('roomCode').value=code; }
-  isHost=true; mySeat=0; document.getElementById('warn').textContent='';
+  if(!code){ code='LOP'+Math.random().toString(36).slice(2,5).toUpperCase();
+             document.getElementById('roomCode').value=code; }
+  iAmTeacher=document.getElementById('isTeacher').checked;
+  joinedAt=Date.now();
+  mySeat=-1; document.getElementById('warn').textContent='';
+  document.getElementById('enter').textContent='Đang vào phòng…';
   if(await connectRoom(code)){
     const c=getCfg()||{};
     const u=new URL(location.href);
@@ -878,42 +894,37 @@ document.getElementById('beHost').addEventListener('click',async()=>{
     if(c.key) u.searchParams.set('sbkey',c.key);
     document.getElementById('shareLink').value=u.toString();
     document.getElementById('shareBox').style.display='block';
+    document.getElementById('enter').textContent='Đã vào phòng';
+    document.getElementById('enter').disabled=true;
+  } else {
+    document.getElementById('enter').textContent='Vào phòng chơi';
   }
 });
 document.getElementById('copyLink').addEventListener('click',async()=>{
   const t=document.getElementById('shareLink'); t.select();
   try{ await navigator.clipboard.writeText(t.value); }catch(e){ document.execCommand('copy'); }
-  document.getElementById('netmsg').innerHTML='Đã copy link. Dán vào Zalo gửi cho học sinh.';
-});
-document.getElementById('beJoin').addEventListener('click',async()=>{
-  const n=(document.getElementById('nMe').value||'').trim();
-  if(!n){ document.getElementById('warn').textContent='Nhập tên trước đã nhé.'; return; }
-  const code=codeField();
-  if(!code){ document.getElementById('warn').textContent='Nhập mã phòng giáo viên cho.'; return; }
-  isHost=false; mySeat=1; document.getElementById('warn').textContent='';
-  await connectRoom(code);
-});
-document.getElementById('startOnline').addEventListener('click',()=>{
-  const other=peersNow.find(p=>!p.sameTab && p.presence && p.presence.role!=='host');
-  if(!other){ document.getElementById('warn').textContent='Chưa thấy học sinh nào trong phòng. Kiểm tra xem em đã bấm “Vào phòng — học sinh” và mã phòng có giống nhau chưa.'; return; }
-  const meName=(document.getElementById('nMe').value||'Giáo viên').trim();
-  const hisAv=(other.presence.av===localAv)?((localAv+2)%6):(other.presence.av||1);
-  newGame([{name:meName,av:localAv,peer:myPeer},
-           {name:(other.presence.name||'Học sinh'),av:hisAv,peer:other.peer}]);
+  document.getElementById('netmsg').innerHTML='Đã copy link. Dán vào Zalo gửi cho người kia.';
 });
 
-/* học sinh mở link có sẵn mã phòng */
-(function(){
-  const q=new URLSearchParams(location.search);
-  const r=(q.get('room')||'').toUpperCase();
-  if(r){
-    document.getElementById('roomCode').value=r;
-    document.getElementById('netmsg').innerHTML='Phòng <b>'+esc(r)+'</b>. Em nhập tên, chọn nhân vật rồi bấm <b>Vào phòng — học sinh</b>.';
-    const q2=new URLSearchParams(location.search);
-    if(q2.get('sburl')&&q2.get('sbkey')) document.getElementById('cfgBox').style.display='none';
-  }
-  cfgUI();
-})();
+/* ---------- ai ngồi ghế nào, ai giữ ván ---------- */
+function seatedPeers(){
+  return peersNow.filter(p=>p.presence && p.presence.seated)
+    .sort((x,y)=> ((y.presence.teacher?1:0)-(x.presence.teacher?1:0))
+               || ((x.presence.t||0)-(y.presence.t||0))
+               || (x.peer<y.peer?-1:1));
+}
+function electHost(){
+  const running=peersNow.find(p=>p.presence && p.presence.game);
+  if(running) return running.peer;
+  const s=seatedPeers();
+  return s.length? s[0].peer : null;
+}
+function autoStart(list){
+  const a=list[0].presence, b=list[1].presence;
+  const av2=(b.av===a.av)?((a.av+2)%6):(b.av||1);
+  newGame([{name:a.name||'Người chơi 1',av:a.av||0,peer:list[0].peer},
+           {name:b.name||'Người chơi 2',av:av2,peer:list[1].peer}]);
+}
 
 function showGame(){
   document.getElementById('setup').style.display='none';
@@ -956,7 +967,7 @@ function handleAct(peer,a){
   if(a.type==='answer' && fromTurnPlayer) doAnswer(a.val);
   if(a.type==='choice' && fromTurnPlayer) doChoice(a.val);
   if(a.type==='next'   && fromTurnPlayer) nextTurn();
-  if(a.type==='judge'  && (peer===S.players[0].peer || !online)) doJudge(a.val);  // chỉ chủ trò chấm
+  if(a.type==='judge'  && (!online || peer===teacherKey || peer===myKey || peer===S.players[0].peer)) doJudge(a.val);  // chỉ chủ trò chấm
   if(a.type==='apply') applySpecial();
   if(a.type==='reroll') S.card.q=pick(CHALLENGE), pushState();
 }
@@ -1189,7 +1200,7 @@ function renderCard(){
   }
 
   if(c.mode==='challenge'){
-    const teacher = !online || mySeat===0;
+    const teacher = !online || (teacherKey ? teacherKey===myKey : mySeat===0);
     card.innerHTML=head.replace(KINDNAME[c.kind]||'Thử thách','THỬ THÁCH')+
       `<h2>${esc(c.q)}</h2>
        <p class="vn" style="color:#6B74A6;font-size:14.5px;margin-top:-6px">
