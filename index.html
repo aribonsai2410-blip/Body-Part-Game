@@ -711,7 +711,7 @@ avatarPicker('avMe',0,i=>{ localAv=i; pushMe(); });
 /* =========================================================
    KẾT NỐI PHÒNG  —  qua Supabase Realtime (không cần đăng nhập)
    ========================================================= */
-const BUILD='bản 8 — 26/09';
+const BUILD='bản 9 — 26/09';
 let lastErr='', peersNow=[], sb=null, ch=null, roomName='';
 const myKey='p'+Math.random().toString(36).slice(2,10);
 let myPresence={}, connCb=null;
@@ -878,6 +878,18 @@ function renderRoomList(peers){
 }
 
 function codeField(){ return (document.getElementById('roomCode').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
+/* mở bằng link có sẵn mã phòng: điền sẵn và khoá lại để không lệch phòng */
+(function(){
+  const q=new URLSearchParams(location.search);
+  const r=(q.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!r) return;
+  const box=document.getElementById('roomCode');
+  box.value=r; box.readOnly=true; box.style.opacity='.85';
+  if(q.get('sburl')&&q.get('sbkey')) document.getElementById('cfgBox').style.display='none';
+  document.getElementById('netmsg').innerHTML='Phòng <b>'+r+'</b>. Nhập tên, chọn nhân vật rồi bấm <b>Vào phòng chơi</b>.';
+  diag();
+})();
 
 let iAmTeacher=false, joinedAt=0, teacherKey=null;
 
