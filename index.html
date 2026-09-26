@@ -874,9 +874,11 @@ function renderRoomList(peers){
   }
 }
 
+function codeField(){ return (document.getElementById('roomCode').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+
 let iAmTeacher=false, joinedAt=0, teacherKey=null;
 
-document.getElementById('enter').addEventListener('click',async()=>{
+document.getElementById('enter').addEventListener('click',async()=>{ try{
   const n=(document.getElementById('nMe').value||'').trim();
   if(!n){ document.getElementById('warn').textContent='Nhập tên trước đã nhé.'; return; }
   let code=codeField();
@@ -898,6 +900,11 @@ document.getElementById('enter').addEventListener('click',async()=>{
     document.getElementById('enter').disabled=true;
   } else {
     document.getElementById('enter').textContent='Vào phòng chơi';
+  }
+  }catch(err){
+    note(err);
+    document.getElementById('enter').textContent='Vào phòng chơi';
+    document.getElementById('warn').textContent='Lỗi khi vào phòng: '+(err&&err.message?err.message:err);
   }
 });
 document.getElementById('copyLink').addEventListener('click',async()=>{
